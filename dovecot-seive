@@ -1,0 +1,129 @@
+Dovecot IMAP, POP Server, LDA, And Sieve Configuration Version 2
+https://www.nesono.com/node/276
+Nov 8th, 2012
+This page explains installation and conﬁguration of dovecot 2 as shipped with Ubuntu 12.04LTS. For the installation of dovecot 1.2, e. g. on Ubuntu 10.04LTS, please check this page.
+
+Dovecot IMAP, POP3, and Sieve services along with MySQL support are installed using the following command.
+
+sudo aptitude install dovecot-imapd dovecot-pop3d dovecot-sieve dovecot-mysql dovecot-managesieved
+In contrast to Dovecot version 1.2, where most conﬁguration was done in the ﬁle /etc/dovecot/dovecot.conf, the conﬁguration of version 2 is distributed over several ﬁles with dedicated purpose, located under /etc/dovecot/conf.d. I will step through the required changes by each necessary ﬁle in the following paragraphs.
+
+Authorization Using MySQL
+
+The authorization settings are conﬁgured in 10-auth.conf. I almost left everything as is, just added the following line to the include section at the very end of the ﬁle
+
+!include auth-sql.conf.ext
+This tells dovecot to include the ﬁle auth-sql.conf.ext, which has yet to be created. Therefore, add the following lines to the ﬁle /etc/dovecot/conf.d/auth-sql-conf.ext:
+
+passdb {
+  driver = sql 
+
+  # Path for SQL configuration file, see example-config/dovecot-sql.conf.ext
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
+
+userdb {
+  driver = sql 
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
+Now make sure to have the following settings within the ﬁle /etc/dovecot/dovecot-sql.conf.ext:
+
+driver = mysql
+connect = host=127.0.0.1 port=3306 user=mailuser password=mailuserpassword dbname=mailserver
+
+# depends on postfixadmin config
+default_pass_scheme = MD5-CRYPT
+
+# taken from postfixadmin docs
+password_query = SELECT username as user, password, concat('/var/spool/postfix/virtual/', maildir) as userdb_home, concat('maildir:/var/spool/postfix/virtual/', maildir) as userdb_mail, 118 as userdb_uid, 8 as userdb_gid FROM mailbox WHERE username = '%u' AND active = '1'
+
+# taken from postfixadmin docs
+user_query = SELECT concat('/var/spool/postfix/virtual/', maildir) as home, concat('maildir:/var/spool/postfix/virtual/',maildir) as mail, 118 AS uid, 8 AS gid FROM mailbox WHERE username = '%u' AND active='1'
+Set The First Valid UID
+
+This is really a quick one: Just open the ﬁle /etc/dovecot/conf.d/10-mail.conf and make sure to set the first_valid_uid to the UID of your mail user. Mine is 113 - and make sure to set the authentication socket path:
+
+first_valid_uid = 113
+auth_socket_path = /var/run/dovecot/auth-userdb
+Conﬁgure The Mail Service
+
+Now add your user names, groups to the ﬁle /etc/dovecot/conf.d/10-master.conf. I have added the following contents (with a little context):
+
+service auth {
+  # auth_socket_path points to this userdb socket by default. It's typically
+  # used by dovecot-lda, doveadm, possibly imap process, etc. Its default
+  # permissions make it readable only by root, but you may need to relax these
+  # permissions. Users that have access to this socket are able to get a list
+  # of all usernames and get results of everyone's userdb lookups.
+  unix_listener auth-userdb {
+    #mode = 0600
+    user = vmail
+    group = mail
+  }
+
+  # Postfix smtp-auth
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0666
+    user = postfix
+    group = postfix
+  }
+
+  # Auth process is run as this user.
+  #user = $default_internal_user
+}
+SSL Conﬁguration
+
+If you provide SSL support, which I would highly recommend, you can add your key, vert and the certiﬁcation authority to the ﬁle /etc/dovecot/conf.d/10-ssl.conf:
+
+# SSL/TLS support: yes, no, required. <doc/wiki/SSL.txt>
+ssl = yes 
+
+# PEM encoded X.509 SSL/TLS certificate and private key. They're opened before
+# dropping root privileges, so keep the key file unreadable by anyone but
+# root. Included doc/mkcert.sh can be used to easily generate self-signed
+# certificate, just make sure to update the domains in dovecot-openssl.cnf
+ssl_cert = </etc/ssl/certs/nesono.crt
+ssl_key = </etc/ssl/private/nesono.key
+ssl_ca = </etc/ssl/private/ca.pem
+Conﬁgure The Local Delivery Agent (LDA)
+
+I simply added the postmaster address and hostname to the ﬁle /etc/dovecot/conf.d/15-lda.conf as well as added sieve as a mail plugin, which is the whole reason why I am using Dovecot LDA at all:
+
+#postmaster_address =
+postmaster_address = postmaster@nesono.com
+
+# Hostname to use in various parts of sent mails, eg. in Message-Id.
+# Default is the system's real hostname.
+hostname = nesono.com
+
+protocol lda {
+  # Space separated list of plugins to load (default is global mail_plugins).
+  #mail_plugins = $mail_plugins
+  mail_plugins = $mail_plugins sieve
+}
+Additionally, you have to tell postﬁx to forward the local delivery dovecot. You do this by modifying the following lines in your /etc/postfix/main.cf:
+
+mailbox_command = /usr/lib/dovecot/deliver
+mailbox_transport = dovecot
+Sieve Conﬁguration
+
+In the ﬁle /etc/dovecot/conf.d/90-sieve.conf I have the following lines uncommented:
+
+plugin {
+  # The path to the user's main active script. If ManageSieve is used, this the
+  # location of the symbolic link controlled by ManageSieve.
+  sieve = ~/.dovecot.sieve
+
+  # Directory for :personal include scripts for the include extension. This
+  # is also where the ManageSieve service stores the user's scripts.
+  sieve_dir = ~/sieve
+}
+Fine
+
+One ﬁnal note: To conﬁgure sieve, you can use roundcube, which no longer seems to have the ﬁle size limitation of the sieve script, which drove me up the wall in the days of roundcube version 0.5.
+
+Now restart dovecot, reload postﬁx and check your mail!
+
+Cheers, iss.
+
+Flattr: 
