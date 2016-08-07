@@ -1,0 +1,12 @@
+imapsync --host1 mail.xxx.xxx --ssl1  --user1 dummy@xxx.xxx --password1  "dummy123" --host2 mx.xxx.xxx  --ssl2 --user2 dummy@xxx.xxx --password2  "123dummy"
+
+zmprov -l  gaa -v|egrep 'cn:|sn:|displayName|givenName|zimbraMailDeliveryAdd' > /tmp/account1.txt
+
+
+imapsync --exclude Emailed /Contacts --host1 mail.xxx.com  --ssl1 --user1 amanda@xxx.com --password1  "amanda#123" --useheader ALL --host2 mx.xxx.com  --ssl2 --user2   amanda@xxx.com --password2  "amanda#123" --useheader ALL
+
+##
+ imapsync --host1 mailserver.xyz.com  --ssl1 --user1  jamesbond@xyz.com --password1  "jamesREs123"  --host2 mx.xyz.com  --ssl2 --user2  jamesbond@xyz.com --password2  "WERxrt#123"
+
+imapsync --exclude Emailed /Contacts --host1 mailserver.classic.com.np  --ssl1 --user1 dragon@abc.com --password1  "dwdwe@123" --useheader ALL --host2 mx.abc.com  --ssl2 --user2  dragon@abc.com --password2  "sdw3e#123" --useheader ALL
+
