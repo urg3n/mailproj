@@ -1,0 +1,79 @@
+##postfix mail server part
+
+apt-get install openssl apache2 mysql-server php5-mysql php5 libapache2-mod-php5 php5-mcrypt php5-imap
+
+hostname mx1.testlab.com
+
+echo `hostname` > /etc/hostname
+
+Points to remember:
+==================================
+Postfix: This Mail Transfer Agent (MTA) handles relaying mail between different servers. It decides what to do with email from the outside world, and whether a particular user is allowed to send email using your server. It handles both incoming and outgoing SMTP. Postfix hands off local delivery (that is, the actual saving of the mail files on the server) to Dovecot’s Local Mail Transfer Protocol service (LMTP). Postfix also lets Dovecot take care of authentication before users are allowed to send email from the server.
+
+Dovecot: This IMAP/POP3 server handles requests from users who want to log in and check their email. Dovecot’s LMTP service functions as the Mail Delivery Agent (MDA) by saving mail files on the server. Dovecot also handles all authorization. It checks users’ email addresses and passwords in the MySQL database before allowing them to view or send email.
+
+MySQL: This database server stores lookup tables for domains, usernames and passwords, and aliases on the mail server.
+Debian 7/Ubuntu 14.04 LTS: These instructions have been tested and confirmed to work with Debian 7 and Ubuntu 14.04 LTS. Other distributions can also be made to work with Postfix, Dovecot, and MySQL, but those instructions are outside the scope of this guide.
+
+Make sure that your firewall is not blocking any of the standard mail ports (25, 465, 587, 110, 995, 143, and 993).
+
+################################## Scenario [domains you own are  "testlab.com" , "example.com" ]
+A) Incoming Mail from outside world
+
+1.	<someone@somewhereelse.com>* sends an email to <me@testlab.com*>.
+2.	DNS is checked. The MX record for testlab.com points to yourserver thats "testlab.com" or "mx1.testlab.com" .
+3.	The message reaches Postfix, the MTA.
+4.	Postfix checks whether it is allowed to relay for mydomain.net by checking the virtual domains table in MySQL.
+5.	MySQL returns a positive response for testlab.com.
+6.	Postfix relays the message using Dovecot’s LMTP socket.
+7.	Dovecot saves the message to the <me@testlab.com>* mailbox on the server, which is located at */var/mail/testlab.com/me/.
+
+The email is now saved in the appropriate mailbox on the server. Next let’s see what happens when you check mail. The process starts when you decide you want to check your <*me@testlab.com>* email from your local email client.
+1.	Local Mail Client to Dovecot: Can I make a secure IMAP Connection?
+2.	Dovecot to Local Mail Client: Sure. Here’s my SSL certificate. Now I need your username and password.
+3.	Local Mail Client to Dovecot: Here’s my username and password.
+4.	Dovecot to MySQL: MySQL, are this username and password in the users table?
+5.	MySQL to Dovecot: Yes. This username and password are in the users table.
+6.	Dovecot accesses the mailbox at /var/mail/mydomain.net/me/.
+7.	Dovecot gets the mail files.
+8.	Dovecot shows the messages to your local mail client using the IMAP protocol.
+Now you can read your email using Outlook, Apple Mail, Thunderbird, etc.
+
+Finally, let’s see what happens when you send an email message from your account. Let’s say you want to send a reply from <me@testlab.com>* back to <someone@somewhereelse.com*>. You compose a message in your local mail client and send it. What happens?
+1.	Local Mail Client to Postfix: Can I make an SMTP connection?
+2.	Postfix to Local Mail Client: Sure. You have to use encryption. Here’s my SSL certificate. Now I need your username and password.
+3.	Local Mail Client to Postfix: Here’s my username and password.
+4.	Postfix to Dovecot: Dovecot, check this username and password for me.
+5.	Dovecot to MySQL: MySQL, are this username and password in the users table?
+6.	MySQL to Dovecot: Yes. This username and password are in the users table.
+7.	Dovecot to Postfix: Postfix, this user is authenticated.
+8.	Postfix to Local Mail Client: You are allowed to send your message.
+9.	Local Mail Client to Postfix: Here’s the message.
+
+Postfix sends the email. This is known as relaying. The reason there are so many processes involved is for security - you don’t want just anyone to be able to send email through your server, otherwise they would quickly start sending lots of spam. The authentication process makes it safe for you and your authorized users to send email using this server while blocking everyone else.
+
+
+
+
+
+
+
+## Mail server  part[2015/02/23]
+Postfix version = 2.11.0-1ubuntu1
+Dovecot version = 2.2.9
+apt-get install postfix postfix-mysql dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd dovecot-mysql mysql-server
+
+In postfix install process
+
+You’ll be prompted to select a Postfix configuration. Select >>>"Internet Site"
+You’ll be prompted to enter a System mail name,Example >>> "testlab.com"  . You can use your FQDN or any domain name that resolves to the server.
+
+## Generate SSL certificate and private key
+
+openssl req -new -x509 -days 3650 -nodes -out /ssc/dovecotsslcert.pem -keyout /ssc/dovecotsslpvtkey.pem
+
+make sure permission is read for root only to keyfile and world read for certificate files like below
+ls -l /ssc/
+-rw-r--r--  1 root root 1464 Feb 24 11:56 dovecotsslcert.pem
+-rw-r-----  1 root root 1704 Feb 24 11:56 dovecotsslpvtkey.pem
+

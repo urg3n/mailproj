@@ -1,0 +1,245 @@
+#setup dovecot 2.x
+dovecot log to check for errors == >  /var/log/upstart/dovecot.log
+
+Dovecot allows users to log in and check their email using POP3 and IMAP. In this section, you’ll configure Dovecot to force users to use SSL when they connect so that their passwords are never sent to the server in plain text. Users will have to connect using the standard SSL ports - 993 for IMAP and 995 for POP3 - and only those ports. Dovecot’s LMTP service will function as the MDA and store incoming messages in the proper locations on the server. Dovecot will also be handling all user authentication for mail.
+
+Dovecot 2 uses a number of different configuration files. The primary configuration file contains a few directives, and then several inclusions of other configuration files. This helps to separate different configuration parameters logically so they’re not all grouped together in one file. This is a major change from Dovecot 1, where virtually everything was configured in the same file.
+
+In this section, you’ll configure Dovecot to:
+
+Set the IMAP, POP3, and LMTP protocols
+Define the mail location
+Use MySQL for username/password lookups for authentication
+Configure needed sockets for authentication and LMTP
+Require SSL encryption
+You’ll modify a total of 7 Dovecot configuration files. Here’s the list:
+
+/etc/dovecot/dovecot.conf: Dovecot’s main configuration file
+/etc/dovecot/conf.d/10-mail.conf: Deals with the server’s file system
+/etc/dovecot/conf.d/10-auth.conf: Defines how user authentication is handled
+/etc/dovecot/conf.d/auth-sql.conf.ext: New authentication file for SQL-type authentication
+/etc/dovecot/dovecot-sql.conf.ext: An included authentication file with the MySQL connection parameters
+/etc/dovecot/conf.d/10-master.conf: Where sockets are configured
+/etc/dovecot/conf.d/10-ssl.conf: Where SSL-related parameters are specified
+Here’s how to configure Dovecot:
+
+
+##Backup original files
+
+cp /etc/dovecot/dovecot.conf /etc/dovecot/dovecot.conf.orig
+cp /etc/dovecot/conf.d/10-mail.conf /etc/dovecot/conf.d/10-mail.conf.orig
+cp /etc/dovecot/conf.d/10-auth.conf /etc/dovecot/conf.d/10-auth.conf.orig
+cp /etc/dovecot/dovecot-sql.conf.ext /etc/dovecot/dovecot-sql.conf.ext.orig
+cp /etc/dovecot/conf.d/10-master.conf /etc/dovecot/conf.d/10-master.conf.orig
+cp /etc/dovecot/conf.d/10-ssl.conf /etc/dovecot/conf.d/10-ssl.conf.orig
+
+vim /etc/dovecot/dovecot.conf
+
+==============================(1) dovecot.conf ======================================
+
+##Verify that dovecot.conf is including all of the other configuration files. This option should be enabled by default:
+
+!include conf.d/*.conf
+
+Add the following line to /etc/dovecot/dovecot.conf so Dovecot knows to support IMAP, POP3, and LMTP. In this example, we have inserted it below the existing !include_try /usr/share/dovecot/protocols.d/*.protocol line:
+
+# Enable installed protocols
+!include_try /usr/share/dovecot/protocols.d/*.protocol
+protocols = imap pop3 lmtp
+
+Save your changes to the /etc/dovecot/dovecot.conf file
+
+===========================(2) /etc/dovecot/conf.d/10-mail.conf ====================
+Find the mail_location variable, uncomment it, and then set it to the following value. This tells Dovecot where to look for mail. In this case, the mail will be stored in /var/mail/vhosts/example.com/user/, where example.com and user are variables that get pulled from the connecting email address. For example, if someone logs in to the server with the email address email1@example.com, Dovecot will use example.com for %d, and email1 for %n. You can change this path if you want, but you’ll have to change it everywhere else the mail storage path is referenced in this tutorial. It’s useful to keep this location in mind if you ever need to manually download the raw mail files from the server.
+
+Find the mail_privileged_group variable. Uncomment it, and then set it to the following value. This allows Dovecot to write to the /var/mail/ folder.
+
+vim /etc/dovecot/conf.d/10-mail.conf
+
+mail_location = maildir:/var/mail/vhosts/%d/%n
+mail_privileged_group = mail
+
+####
+
+## verify the permissions for /var/mail:
+
+ls -ld /var/mail
+drwxrwsr-x 2 root mail 4096 Mar  6 15:08 /var/mail
+
+## Create the /var/mail/vhosts/ folder and the folder(s) for each of your domains by entering the following command:
+
+mkdir -p /var/mail/vhosts/example.com
+
+#### Create the vmail user with a user and group id of 5000 by entering the following commands, one by one. This user will be in charge of reading mail from the server.
+
+groupadd -g 5000 vmail
+useradd -g vmail -u 5000 vmail -d /var/mail
+
+#### Change the owner of the /var/mail/ folder and its contents to belong to vmail by entering the following command:
+
+chown -R vmail:vmail /var/mail
+
+
+==================== (3) /etc/dovecot/conf.d/10-auth.conf  =============================
+
+Open the user authentication file for editing by entering the command below. You need to set up authentication so only authenticated users can read mail on the server. You also need to configure an authentication socket for outgoing mail, since we told Postfix that Dovecot was going to handle that. There are a few different files related to authentication that get included in each other.
+#### 10-auth.conf
+
+disable_plaintext_auth = yes   #Disable plain-text authentication by uncommenting this line
+auth_mechanisms = plain login
+#!include auth-system.conf.ext   <== comment this line to disable system logins
+
+###  Enable MySQL authentication by uncommenting the auth-sql.conf.ext line. That section should look like this:
+....
+.....
+#!include auth-system.conf.ext  <==comment this 
+!include auth-sql.conf.ext      #you need to make auth-sql.conf.ext later
+#!include auth-ldap.conf.ext
+#!include auth-passwdfile.conf.ext
+#!include auth-checkpassword.conf.ext
+#!include auth-vpopmail.conf.ext
+#!include auth-static.conf.ext
+
+
+### End
+save changes
+
+#creating mysql connection for dovecot authentication
+
+===================  vim /etc/dovecot/conf.d/auth-sql.conf.ext 
+
+#passdb tells Dovecot how to look up users for authentication. We're telling Dovecot to use MySQL. 
+#In the args line, we are also specifying the file that contains the MySQL connection information.
+passdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql.conf.ext        
+}
+#you will need to create /etc/dovecot/dovecot-sql.conf.ext 
+#userdb tells Dovecot where to look for users mail on the server. Were using a static driver since the path will be in the same format for everyone
+userdb {
+  driver = static
+  args = uid=vmail gid=vmail home=/var/mail/vhosts/%d/%n
+}
+## End
+
+Explanation of parameters:
+
+passdb tells Dovecot how to look up users for authentication. We’re telling Dovecot to use MySQL. In the args line, we’re also specifying the file that contains the MySQL connection information.
+userdb tells Dovecot where to look for users’ mail on the server. We’re using a static driver since the path will be in the same format for everyone.
+
+========   vim  /etc/dovecot/dovecot-sql.conf.ext      ============================
+
+#add to beginning of this file , check for uncomented lines with grep -v "#"
+
+driver = mysql
+connect = host=127.0.0.1 dbname=postfixadmin user=postfixadmin password=redhat
+default_pass_scheme = MD5-CRYPT
+password_query = SELECT username as user, password FROM mailbox WHERE username='%u';
+
+
+Note:-
+Uncomment the password_query line and set it to the following. This is a MySQL query that Dovecot uses to retrieve the password from the database.
+
+/etc/dovecot/dovecot-sql.conf.ext
+
+password_query = SELECT email as user, password FROM virtual_users WHERE email='%u';
+This password query lets you use an email address listed in the virtual_users table as your username credential for an email account. The primary email address should still be used as the username, even if you have set up your email client for an alias. If you want to be able to use the alias as your username instead (listed in the virtual_aliases table), you should first add every primary email address to the virtual_aliases table (directing to themselves) and then use the following line in /etc/dovecot/dovecot-sql.conf.ext instead:
+
+password_query = SELECT email as user, password FROM virtual_users WHERE email=(SELECT destination FROM virtual_aliases WHERE source = '%u');
+
+###
+Change the owner and group of the /etc/dovecot/ directory to vmail and dovecot by entering the following command:
+chown -R vmail:dovecot /etc/dovecot
+chmod -R o= /etc/dovecot/            ## removing permission for world 
+chmod -R o-rwx /etc/dovecot
+
+Open the sockets configuration file by entering the following command. You’ll change the settings in this file to set up the LMTP socket for local mail delivery, and the auth socket for authentication. Postfix uses these sockets to connect to Dovecot’s services.
+
+nano /etc/dovecot/conf.d/10-master.conf
+
+ service imap-login {
+    inet_listener imap {
+      port = 0                     #comment it according to need, read logs 
+    }
+  ...
+  }
+
+  service pop3-login {
+    inet_listener pop3 {
+      port = 0                      #comment it according to need, read logs
+    }
+  ...
+  }
+  ##Find the service lmtp section and use the configuration shown below. You’ll need to add a few lines in the unix_listener block. 
+  #This section makes the socket for LMTP in the place we told Postfix to look for it.
+  
+    service lmtp {
+   unix_listener /var/spool/postfix/private/dovecot-lmtp {
+     mode = 0600
+     user = postfix
+     group = postfix
+    }
+    # Create inet listener only if you can't use the above UNIX socket
+    #inet_listener lmtp {
+      # Avoid making LMTP visible for the entire internet
+      #address =
+      #port =
+    #}
+  }
+  
+  
+  #Locate the service auth section and use the configuration shown below. You’ll need to create a new unix_listener block, modify the existing one, and then uncomment and set the user. This section makes the authorization socket where we told Postfix to look for it:
+  
+  service auth {
+  # auth_socket_path points to this userdb socket by default. It's typically
+  # used by dovecot-lda, doveadm, possibly imap process, etc. Its default
+  # permissions make it readable only by root, but you may need to relax these
+  # permissions. Users that have access to this socket are able to get a list
+  # of all usernames and get results of everyone's userdb lookups.
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0660   ### change to 0666 if necessary
+    user = postfix
+    group = postfix
+  }
+
+  unix_listener auth-userdb {
+    mode = 0600
+    user = vmail
+    #group =
+  }
+
+  # Postfix smtp-auth
+  #unix_listener /var/spool/postfix/private/auth {
+  #  mode = 0666
+  #}
+
+  # Auth process is run as this user.
+  user = dovecot
+}
+
+
+service auth-worker {
+  # Auth worker process is run as root by default, so that it can access
+  # /etc/shadow. If this isn't necessary, the user should be changed to
+  # $default_internal_user.
+  user = vmail
+}
+
+ ====== vim  /etc/dovecot/conf.d/10-ssl.conf
+ssl = required   ##force client to use ssl
+
+ssl_cert = </ssc/dovecotsslcert.pem
+ssl_key = </ssc/dovecotsslpvtkey.pem
+
+
+
+#your server is done ready
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,67 @@
+# See /usr/share/postfix/main.cf.dist for a commented, more complete version
+
+
+# Debian specific:  Specifying a file name will cause the first
+# line of that file to be used as the name.  The Debian default
+# is /etc/mailname.
+#myorigin = /etc/mailname
+
+smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+biff = no
+
+# appending .domain is the MUA's job.
+append_dot_mydomain = no
+
+# Uncomment the next line to generate "delayed mail" warnings
+#delay_warning_time = 4h
+
+readme_directory = no
+
+#Default TLS parameters
+#smtpd_tls_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+#smtpd_tls_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+#smtpd_use_tls=yes
+#smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
+#smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+smtpd_helo_required = yes
+#Urgen sherpa uns tls params
+smtpd_tls_cert_file=/ssc/dovecotsslcert.pem
+smtpd_tls_key_file=/ssc/dovecotsslpvtkey.pem
+smtpd_use_tls=yes
+smtpd_tls_auth_only = yes
+#Enabling SMTP for authentication and handing off authentication to Dovecot
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
+smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
+#local mail delivery setting- the service that actually saves the emails to individual user mailboxes
+#we tell postfix to use dovecot's lmtp instead of postfix LDA this applies to all MYSQL listed virtual domain
+#Handing off local delivery to Dovecot's LMTP, and telling it where to store mail
+virtual_transport=lmtp:unix:private/dovecot-lmtp
+#Virtual domains, users, and aliases
+#for domain
+virtual_mailbox_domains=mysql:/etc/postfix/mysql-virtual-mailbox-domains.cf
+#for email account
+virtual_mailbox_maps=mysql:/etc/postfix/mysql-virtual-mailbox-maps.cf
+#for email aliases
+virtual_alias_maps=mysql:/etc/postfix/mysql-virtual-alias-maps.cf
+
+
+
+
+# See /usr/share/doc/postfix/TLS_README.gz in the postfix-doc package for
+# information on enabling SSL in the smtp client.
+
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+myhostname = mx1.testlab.com
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+myorigin = /etc/mailname
+#mydestination = testlab.com, mx1.testlab.com, localhost.testlab.com, localhost
+mydestination = localhost
+relayhost = 
+mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+inet_protocols = all

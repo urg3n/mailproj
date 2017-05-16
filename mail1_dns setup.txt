@@ -1,0 +1,108 @@
+apt-get install 
+apt-get install bind9 bind9utils bind9-doc
+apt-get install openssl apache2 mysql-server php5-mysql php5 libapache2-mod-php5 php5-mcrypt
+
+((Notedown the mysql password: eg. i set the password to "redhat"))
+
+install php5 modules as needed ..to search for modules => 
+apt-cache search php5-    
+
+### Settingup Authoritative DNS
+
+root@mx1:/etc/bind# cat named.conf.options | grep -v -i "//"
+options {
+	directory "/var/cache/bind";
+	recursion no;
+	allow-transfer { none; };
+
+	dnssec-validation auto;
+
+	auth-nxdomain no;    # conform to RFC1035
+	listen-on-v6 { any; };
+
+};
+
+## define zone file locations and zone roles on  both forward and reverse zone
+
+root@mx1:/etc/bind# cat named.conf.local | grep -v -i "//"
+zone "testlab.com" {
+type master;   
+file "/etc/bind/zones/db.testlab.com";
+};
+zone "163.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.192.168.163";
+};
+zone "example.com" {
+type master;
+file "/etc/bind/zones/db.example.com";
+};
+###Zone file for testlab.com
+
+root@mx1:/etc/bind/zones# cat db.testlab.com 
+;
+; BIND data file for local loopback interface
+;
+$TTL	604800
+@	IN	SOA	mx1.testlab.com. root.testlab.com. (
+			      4		; Serial
+			 604800		; Refresh
+			  86400		; Retry
+			2419200		; Expire
+			 604800 )	; Negative Cache TTL
+;
+
+;Nameservers
+testlab.com.	IN	NS	mx1.testlab.com.
+;testlab.com.    IN      NS      mx2.testlab.com.
+;Mailexchange
+	IN MX 10 mail.testlab.com.
+; A record information
+mx1 IN A 192.168.163.20
+@ IN A 192.168.163.20
+www IN A 192.168.163.20
+mail IN A 192.168.163.20
+ftp IN A 192.168.163.20
+
+###Zone file for "example.com"
+
+root@mx1:/etc/bind/zones# cat db.example.com 
+;
+; BIND data file for local loopback interface
+;
+$TTL	604800
+@	IN	SOA	mx1.testlab.com. root.example.com. (
+			      4		; Serial
+			 604800		; Refresh
+			  86400		; Retry
+			2419200		; Expire
+			 604800 )	; Negative Cache TTL
+;
+
+;Nameservers
+@	IN	NS	mx1.testlab.com.
+;example.com.    IN      NS      mx2.example.com.
+;Mailexchange
+	IN MX 10 mail.testlab.com.
+; A record information
+mail.testlab.com IN A 192.168.163.20
+mx1 IN A 192.168.163.20
+@ IN A 192.168.163.20
+www IN A 192.168.163.20
+mail IN A 192.168.163.20
+ftp IN A 192.168.163.20
+
+###Check dns configuration
+named-checkzone example.com /etc/bind/zones/db.example.com 
+zone example.com/IN: loaded serial 4
+OK
+
+named-checkzone testlab.com /etc/bind/zones/db.testlab.com 
+zone testlab.com/IN: loaded serial 4
+OK
+#Restart bind
+service bind9 restart
+
+
+
+

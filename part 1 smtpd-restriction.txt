@@ -1,0 +1,132 @@
+smtpd Restrictions
+=================
+
+ Problems with the SMTP Protocol
+
+    One technique used by UCE( unsolicited commercial email ) senders to hide their identity is to use phony addresses in the From: mail header lines. This is possible due to a security limitation in the standrad SMTP Protocol. During a normal SMTP session, both the HELO and the MAIL FROM: commands identify the sender. The remote host can enter any value for these commands.
+    
+	
+    HELO/EHLO is what the sending machine *tells* your machine it is. It is easily spoofed and frequently mis-configured. Thus it may have no basis in reality.
+
+    Sender is the envelope-sender address (SMTP "MAIL FROM"), not the client machine's IP address or host name, or the "From:" field in the headers. (Though envelope-sender may well match "From:" in the headers.)
+
+    Client is the sending machine's IP address - and possibly host name (if there is one).
+
+	While it can be a good idea to restrict / reject specific types of messages as early as possible (a helo based restriction in the smtpd_helo_restrictions section), by placing all of the restrictions into the smtpd_recipient_restrictions, you will be able to accumulate as much information about the attempted spam as possible, as well as order all of the restrictions to better allow you to prevent spam - therefore we suggest to leave the client, helo and sender rstriction level empty. 
+	
+smtpd_client_restrictions = [empty by default]
+smtpd_helo_restrictions = [empty by default]
+smtpd_sender_restrictions = [empty by default]
+
+
+
+    SMTPD client restrictions will put restrictions on what systems will be able to send mail through your server based on the client IP and host information (name). As restrictions are looked at in order, you will typically want to look at filters or restrictions that are based on local information first, in order to limit the external communications that will be initiated for each message.
+
+Content of main.cf
+
+    smtpd_client_restrictions =
+      check_client_access hash:/etc/postfix/maps/access_client,
+      permit
+
+Content of access_client
+
+    80.218.40.251  REJECT
+	
+ Compile access_client into access_client.db
+
+    postmap hash:access
+
+SMTPD helo restrictions will put restrictions on what systems will be able to send mail through your server based on the helo identification string.	
+smtpd_helo_required = yes
+
+SMTPD sender restrictions will put restrictions on what addresses will be able to send mail through your server based on the sender email address (MAIL FROM:) 
+
+Note that all of the restrictions are in the recipient section because we like to have as much information as possible before rejecting an email. If you were to reject at smtpd_client_restrictions, then you would not be able to determine the helo, sender, and recipient information, which could help improve the filters.
+
+ smtpd_recipient_restrictions =
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_unauth_destination,
+    reject_invalid_hostname,
+    reject_unauth_pipelining,
+    reject_non_fqdn_sender,
+    reject_unknown_sender_domain,
+    reject_non_fqdn_recipient,
+    reject_unknown_recipient_domain,
+    check_client_access hash:/etc/postfix/maps/access_client,
+    check_helo_access hash:/etc/postfix/maps/access_helo,
+    check_sender_access hash:/etc/postfix/maps/access_sender,
+    check_recipient_access hash:/etc/postfix/maps/access_recipient,
+    reject_rhsbl_client blackhole.securitysage.com,
+    reject_rhsbl_sender blackhole.securitysage.com,
+    reject_rbl_client relays.ordb.org,
+    reject_rbl_client blackholes.easynet.nl,
+    reject_rbl_client cbl.abuseat.org,
+    reject_rbl_client proxies.blackholes.wirehub.net,
+    reject_rbl_client bl.spamcop.net,
+    reject_rbl_client sbl.spamhaus.org,
+    reject_rbl_client opm.blitzed.org,
+    reject_rbl_client dnsbl.njabl.org,
+    reject_rbl_client list.dsbl.org,
+    reject_rbl_client multihop.dsbl.org,
+    permit
+
+By placing the RBL checks at the end, we are making sure that an external DNS check will only occur if nothing else will reject the spam message.
+
+The trailing "permit" isn't necessary, strictly speaking, because there's an earlier "permit_mynetworks.". We just put it there because  it makes clear that whatever passes the earlier "check" and "reject" tests will be permitted. 
+
+ Header and Body Checks
+
+    Additional to the above checks you may want to scan the Header and/or Body of the Message for UCE Texts. Note that you cannot whitelist a sender or client in an access list to bypass header or body checks. Header and body checks take place whether you explicitly "OK" a client or sender, in access lists, or not.
+
+Header Checks
+
+    The first thing that needs to be done is to enable header checks in the Postfix main.cf configuration file. This will tell postfix where to look for the header checks file.
+
+    To do this, add the following lines to main.cf:
+
+    header_checks = regexp:/etc/postfix/maps/header_checks
+    mime_header_checks = regexp:/etc/postfix/maps/mime_header_checks
+
+    The format for each line in the header_checks file is as follows:
+
+    /^HEADER: .*content_to_act_on/ ACTION
+
+    The HEADER listed can be any header available in an email. The Subject header is the most popular to reject on for key words or phrases in spam filtering, but others can be very useful as well.
+
+    Example
+
+    /^Subject: .*Make Money Fast!/ REJECT
+
+Mime Header Checks
+
+    In the mime_header_checks file, you will place a restriction for any file extentsons that you do not want to have passing through your system. For example:
+
+    /name=[^>]*\.(bat|com|exe|dll)/ REJECT
+
+    This will reject any messages that have attachments whose files end in .bat, .com, .exe or .dll.
+
+Body Checks
+
+    The first thing that needs to be done is to enable body checks in the Postfix main.cf configuration file. This will tell postfix where to look for the body checks file.
+
+    To do this, add the following line to the file:
+
+    body_checks = regexp:/etc/postfix/maps/body_checks
+
+    The format for each line in the body_checks file is as follows:
+
+    /content_to_act_on/ ACTION
+
+	
+Disable the SMTP VRFY command. This stops some techniques used to harvest email addresses. 
+disable_vrfy_command = yes  #(default: no)
+
+
+
+
+
+ 
+	
+
+

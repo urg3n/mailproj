@@ -1,0 +1,61 @@
+#POSTFIXADMIN part
+
+go to mysqlconsole create postfix database
+
+
+#install postfixadmin for webmgmt interface
+
+apt-get install postfixadmin
+
+Please choose the web server that should be automatically configured ..
+Select * apache2  <==
+
+Select [OK]  <=this will autocreate database for postfixadmin
+
+Select mysql  <= Mysql is database you will use
+
+Enter your root password *********  [OK]
+Enter your postfixadmin password  ******** [OK]
+
+#postfixadmin_2.3.5-3 will be installed as of date 2015-02-27
+
+To check if postfixadmin user/password work login to mysql:
+
+mysql -upostfixadmin -p
+Enter password: ********
+mysql>{OK}
+
+@Browser
+goto
+http://192.168.0.20/postfixadmin/setup.php
+
+enter an email and password
+copy the encrypted password search for $CONF['setup_password'] #line 36 and paste in the file /etc/postfixadmin/config.inc.php
+example:- $CONF['setup_password'] = 'a8b9c68e6116985ad34a80d8720ad6a4:c1fe2e616ce992a3c9837332ff42cf48c165sdf';
+
+@Mail/webserver create link for apache configuration in your Postfix Mail/webserver:-
+
+ln -s /etc/postfixadmin/apache.conf /etc/apache2/conf-enabled/postfixadmin.conf
+service apache2 reload
+
+goto browser and hit => http://serverip/postfixadmin
+
+ok
+
+Secure postfixadmin with ssl:-
+edit /usr/share/postfixadmin/login.php , add below php command just below the <?php start line on top
+
+vim /usr/share/postfixadmin/login.php
+
+<?php
+if(!isset($_SERVER['HTTPS']) || $_SERVER['HTTPS'] == ""){
+    $redirect = "https://".$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
+    header("HTTP/1.1 301 Moved Permanently");
+    header("Location: $redirect");
+}
+.....
+.....
+
+ 
+
+

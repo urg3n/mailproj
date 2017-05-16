@@ -1,0 +1,60 @@
+apt-get update
+
+apt-get install --assume-yes   roundcube   roundcube-plugins   roundcube-plugins-extra   php-mail   php-mail-mimedecode   php-mime-type   php-mail-mime
+
+#Roundcube Version: 0.9.5-4 as pf as of date 2015-March-8
+
+php5enmod mcrypt
+vim /etc/roundcube/apache.conf
+Alias /webmail /var/lib/roundcube
+
+chown root:www-data /etc/roundcube/main.inc.php
+chmod 640  /etc/roundcube/main.inc.php
+vim  /etc/roundcube/main.inc.php
+
+#search for $rcmail_config['default_host'] near line 78 under IMAP section
+$rcmail_config['default_host'] = 'ssl://localhost';
+// TCP port used for IMAP connections
+$rcmail_config['default_port'] = 993;
+
+#at line 146 under SMTP section
+$rcmail_config['smtp_server'] = 'tls://localhost';
+#at line 150
+ $rcmail_config['smtp_port'] = 587;
+ #at line 154
+ $rcmail_config['smtp_user'] = '%u';
+#at line 158 
+$rcmail_config['smtp_pass'] = '%p';
+#at line 162
+#// SMTP AUTH type (DIGEST-MD5, CRAM-MD5, LOGIN, PLAIN or empty to use
+#// best server supported one)
+$rcmail_config['smtp_auth_type'] = '';
+
+
+####Activating the Password plugin
+vim /etc/roundcube/main.inc.php
+
+#at line 414  under "plugins"
+$rcmail_config['plugins'] = array();
+$rcmail_config['plugins'] = array('password');
+
+##
+cd /etc/roundcube/plugins/
+#backup the original plugin file by renaming or something like that
+mv config.inc.php  config.inc.php.original
+cp /usr/share/roundcube/plugins/password/config.inc.php.dist /etc/roundcube/plugins/password/config.inc.php
+vim config.inc.php
+
+#near line 39   change  "  $rcmail_config['password_db_dsn'] = ''; " to below
+$rcmail_config['password_db_dsn'] = 'mysql://postfixadmin:redhat@localhost/postfixadmin';
+
+#better use separate user or you can use postfixadmin user password also
+#change line 59 #$rcmail_config['password_query'] = 'SELECT update_passwd(%c, %u)'; to
+
+$rcmail_config['password_query'] = "UPDATE `mailbox` SET `password` = %c, modified=now() WHERE `username` = %u LIMIT 1";
+$rcmail_config['password_crypt_hash'] = 'md5';
+
+#save and restart apache2 and change password from roundcube webmail
+
+http://lists.roundcube.net/pipermail/users/2011-April/007797.html
+

@@ -1,0 +1,12 @@
+#passdb tells Dovecot how to look up users for authentication. We're telling Dovecot to use MySQL. 
+#In the args line, we are also specifying the file that contains the MySQL connection information.
+passdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
+#userdb tells Dovecot where to look for users mail on the server. Were using a static driver since the path will be in the same format for everyone
+userdb {
+  driver = static
+  args = uid=vmail gid=vmail home=/var/mail/vhosts/%d/%n
+}
+

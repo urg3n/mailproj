@@ -1,0 +1,55 @@
+##mysql connection file for postfix
+MAKESURE YOU CHECK DATABASE NAME AND TABLE,COLUMN NAMES WILL MATCH WITH THOSE OF THE POSTFIXADMIN DATABASE
+Create the three files you specified earlier. These files will tell Postfix how to connect to MySQL to read the lists of domains, email addresses, and aliases. Create the file for virtual domains by entering the following command:
+####  DOMAIN VIRTUAL #####
+nano /etc/postfix/mysql-virtual-mailbox-domains.cf     
+
+user = postfixadmin	
+password = redhat
+hosts = 127.0.0.1
+dbname = postfixadmin
+query = SELECT 1 FROM domain WHERE domain='%s'
+
+### EMAIL ACCOUNT
+
+root@mx1:/etc/postfix# cat mysql-virtual-mailbox-maps.cf
+
+user = postfixadmin
+password = redhat
+hosts = 127.0.0.1
+dbname = postfixadmin
+query = SELECT 1 FROM mailbox WHERE username='%s'
+
+### ALIASES
+root@mx1:/etc/postfix# cat mysql-virtual-alias-maps.cf
+
+user = postfixadmin
+password = redhat
+hosts = 127.0.0.1
+dbname = postfixadmin
+query = SELECT goto FROM alias WHERE address='%s'
+
+### restart postfix 
+service postfix restart
+############################### TEST with postmap . if nothing is returned in o/p or if echo$? is 1 then something is wrong
+#check DOMAIN with postmap
+root@mx1:/etc/postfix# postmap -q example.com mysql:/etc/postfix/mysql-virtual-mailbox-domains.cf
+1     [ 1 is OK] 
+
+#check Mail Account 
+root@mx1:/etc/postfix# postmap -q user2@testlab.com mysql:/etc/postfix/mysql-virtual-mailbox-maps.cf 
+1 [1 is OK]
+#check alias [make an alias from postfixadmin web interface, here support@testlab.com is alias for user1@testlab.com]
+
+postmap -q support@testlab.com  mysql:/etc/postfix/mysql-virtual-alias-maps.cf
+user1@testlab.com
+
+
+
+
+
+
+
+
+
+

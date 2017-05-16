@@ -1,0 +1,146 @@
+postfix configuration:-
+========================
+
+As the Mail Transfer Agent, Postfix decides where to relay messages that get directed to your server from anywhere else on the Internet. It also handles all SMTP connections and sends out messages for your users. In this section, you’ll modify some of these Postfix configuration options:
+
+Virtual domains, aliases, and users, so you don’t have to make an actual UNIX user for everybody who needs an email address
+MySQL access, so it can read the list of domains for which it should be handling mail
+Hand-off for incoming email to Dovecot’s LMTP service so it can get saved on the server
+STARTTLS encryption for all connections, for increased security
+Access to ports 465 and 587 for sending, in addition to the default port 25
+Hand-off for smtp authentication to Dovecot
+
+cp /etc/postfix/main.cf /etc/postfix/main.cf.orig
+
+nano /etc/postfix/main.cf
+
+Comment out all of the lines in the #TLS parameters section, and then paste in the four new lines shown below. Since we’re using Dovecot for authentication, we’re going to use Dovecot’s default certificate rather than Postfix’s default certificate. For increased security, we’re also going to force users to use TLS encryption.
+
+### main.cf 
+smtpd_tls_cert_file=/ssc/dovecotsslcert.pem
+smtpd_tls_key_file=/ssc/dovecotsslpvtkey.pem
+smtpd_use_tls=yes
+smtpd_tls_auth_only = yes
+## contd ...
+If you have purchased an SSL certificate for your mail server, you should use the path to that certificate and its corresponding key, not the default Dovecot certificate. Otherwise, you can just use the following values.
+Explanation of parameters:
+###main.cf
+smtpd_tls_cert_file: The location of your SSL certificate.
+smtpd_tls_key_file: The location of your SSL certificate’s private key.
+smtpd_use_tls: This tells connecting mail clients that STARTTLS encryption is available.
+smtpd_tls_auth_only: This forces connecting mail clients to use STARTTLS before users are allowed to authenticate, ensuring that your users’ passwords are never sent in plain text.
+
+#### contd ...
+
+Copy and paste the following values into the config file below the TLS settings. This will ease the restrictions and allow users to send email from their home or office. By default, only users who are logged into the server locally are able to send email. They will be required to log in with a password before being able to send email - this is very important, or anyone could start using your server to send spam! The smtpd_sasl_type and smtpd_sasl_path lines tell Postfix to use Dovecot for user authentication. Dovecot already authenticates users checking their email, so it makes sense to have it handle outgoing authentication too.
+
+#### main.cf
+
+##  Enabling SMTP for authenticated users, and handing off authentication to Dovecot
+  smtpd_sasl_type = dovecot
+  smtpd_sasl_path = private/auth
+  smtpd_sasl_auth_enable = yes
+
+  smtpd_recipient_restrictions =
+          permit_sasl_authenticated,
+          permit_mynetworks,
+          reject_unauth_destination
+		  
+#### contd ...
+Explanation of parameters:
+
+smtpd_sasl_type: SASL (Simple Authentication and Security Layer) is the framework for authentication that Postfix uses. Authentication is needed so that only authorized users can use your server to send mail. In this case, we’re telling Postfix to use Dovecot’s authentication.
+smtpd_sasl_path: This is the path to the authentication socket. The path used here is relative to /var/spool/postfix/. The socket is located at /var/spool/postfix/private/auth, or it will be when we create it with Dovecot. Socket is a special file type, similar to TCP/IP sockets, providing inter-process networking protected by the file system's access control.
+smtpd_sasl_auth_enable: This tells Postfix to let people send email using this server if they’ve successfully authenticated. If this was turned off, Postfix would let people send email only if they were already on the server (e.g., they were logged in with SSH).
+smtpd_recipient_restrictions: This tells Postfix which types of users are allowed to send email to other email addresses using the server. (Specifically, it applies to messages that have a RCPT TO component.) The first two parameters we added tell Postfix to allow sending for SASL-authenticated users and for users connecting from a network listed in the mynetworks parameter (in our case, just the server’s local network). The final parameter tells Postfix to reject sending email unless the recipient is for someone on this server.
+
+Comment out the existing mydestination line and replace it with one for localhost. This allows you to use the virtual domains listed in our MySQL table. It’s important that there is no overlap between the domains in the MySQL table and the domains in the mydestination line. Keeping the localhost entry in mydestination lets you keep things simple for mail sent within the server using localhost, which could be helpful if you’re ever having problems with your virtual domains.
+#### main.cf
+
+mydestination = localhost
+
+#### contd ..
+
+Add a new line for local mail delivery (the service that actually saves the emails to individual user mailboxes). We’re telling Postfix not to use its own Local Delivery Agent (LDA) and instead use Dovecot’s LMTP (Local Mail Transfer Protocol) for local delivery. This applies to all virtual domains listed in the MySQL table.
+
+### main.cf
+ #Handing off local delivery to Dovecot's LMTP, and telling it where to store mail
+  virtual_transport = lmtp:unix:private/dovecot-lmtp
+## contd ..
+
+Add the following values to configure your virtual domains, users, and aliases. No changes are necessary.
+
+Explanation of parameters:
+
+virtual_mailbox_domains: Here you tell Postfix that you’re using MySQL to store virtual domains, and then give it a path to another file where you’ll put all the MySQL connection details.
+virtual_mailbox_maps: Same as above, but for email users.
+virtual_alias_maps: Same as above, but for aliases.
+
+### main.cf
+  #Virtual domains, users, and aliases
+  virtual_mailbox_domains = mysql:/etc/postfix/mysql-virtual-mailbox-domains.cf
+  virtual_mailbox_maps = mysql:/etc/postfix/mysql-virtual-mailbox-maps.cf
+  virtual_alias_maps = mysql:/etc/postfix/mysql-virtual-alias-maps.cf
+## contd ...
+
+compare to below main.cf 
+=========================
+cat /etc/postfix/main.cf
+
+#myorigin = /etc/mailname
+
+smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+biff = no
+
+# appending .domain is the MUA's job.
+append_dot_mydomain = no
+
+# Uncomment the next line to generate "delayed mail" warnings
+#delay_warning_time = 4h
+
+readme_directory = no
+
+#Urgen sherpa uns tls params
+smtpd_tls_cert_file=/ssc/dovecotsslcert.pem
+smtpd_tls_key_file=/ssc/dovecotsslpvtkey.pem
+smtpd_use_tls=yes
+smtpd_tls_auth_only = yes
+#Enabling SMTP for authentication and handing off authentication to Dovecot
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
+smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
+
+#local mail delivery setting- the service that actually saves the emails to individual user mailboxes
+#we tell postfix to use dovecot's lmtp instead of postfix LDA this applies to all MYSQL listed virtual domain
+#Handing off local delivery to Dovecot's LMTP, and telling it where to store mail
+
+virtual_transport=lmtp:unix:private/dovecot-lmtp
+
+#Virtual domains, users, and aliases
+#for domain
+virtual_mailbox_domains=mysql:/etc/postfix/mysql-virtual-mailbox-domains.cf
+#for email account
+virtual_mailbox_maps=mysql:/etc/postfix/mysql-virtual-mailbox-maps.cf
+#for email aliases
+virtual_alias_maps=mysql:/etc/postfix/mysql-virtual-alias-maps.cf
+
+# See /usr/share/doc/postfix/TLS_README.gz in the postfix-doc package for
+# information on enabling SSL in the smtp client.
+
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+myhostname = mx1.testlab.com
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+myorigin = /etc/mailname
+#mydestination = testlab.com, mx1.testlab.com, localhost.testlab.com, localhost
+mydestination = localhost
+relayhost = 
+mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+inet_protocols = all
+
+
+
